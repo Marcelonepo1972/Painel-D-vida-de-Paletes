@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#098E3E">
-<title>Saldo Devedor por Fornecedor</title>
+<title>Saldo Circulante</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -72,80 +72,53 @@ main{max-width:1100px;margin:0 auto;padding:16px}
 .spin{width:28px;height:28px;border:3px solid var(--borda);border-top-color:var(--oba-verde);border-radius:50%;margin:0 auto 10px;animation:g .8s linear infinite}
 @keyframes g{to{transform:rotate(360deg)}}
 .regra{font-size:12px;color:var(--texto-2);background:#fff;border-radius:var(--raio-sm);padding:10px 12px;margin-top:18px;line-height:1.5}
+.forn .tot.neg{color:var(--oba-verde-esc)}
+.neg{color:var(--oba-verde-esc)}
 </style>
 </head>
 <body>
 <header>
   <span class="logo"><b>o</b>ba</span>
-  <div><h1>Saldo devedor de paletes</h1><small id="hora">carregando…</small></div>
+  <div><h1>Saldo Circulante</h1><small id="hora">carregando…</small></div>
   <button class="hbtn" id="btnAt" onclick="carregar()">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Atualizar
   </button>
 </header>
 
 <main>
-  <div class="titulo" id="titulo">Lendo os três controles…</div>
-  <div class="sub">PBR, Descartável e Chapatex que o CD ainda deve aos fornecedores de produto. Reformas não entram.</div>
+  <div class="titulo" id="titulo">Lendo o Material Circulante…</div>
+  <div class="sub">PBR, Descartável e Chapatex que o CD ainda deve aos fornecedores de produto. Fonte: Material Circulante, Paletes a Fornecedores. Reformas não entram.</div>
 
-  <div class="fontes" id="fontes"></div>
   <div class="cards" id="cards"></div>
 
   <div class="barra">
     <input id="busca" type="search" placeholder="Buscar fornecedor ou nº do vale" oninput="deb()">
-    <button class="btn" id="btnCsv" onclick="exportar()">Exportar CSV</button>
+    <button class="btn" onclick="exportar()">Exportar CSV</button>
   </div>
 
-  <div class="lista" id="lista"><div class="carregando"><div class="spin"></div>Lendo PaletCD, Material Circulante e Recebimento de Paletes…</div></div>
+  <div class="lista" id="lista"><div class="carregando"><div class="spin"></div>Lendo os vales dos fornecedores…</div></div>
 
   <div class="secao" id="secAlertas"></div>
 
   <div class="regra">
-    <b>Como o saldo é montado.</b> Cada vale é identificado pelo número (espaços ignorados, maiúsculo). Se o mesmo vale está em mais de um app, conta uma vez só: para cada modelo vale a maior quantidade devida e a maior quantidade paga entre as fontes. Saldo = devido menos pago. Vale pago a mais não reduz a dívida dos outros: fica zerado e aparece nos alertas.
-    Fontes: PaletCD (Recebimento / Pagamento Fornecedor e Saída p/ Fornecedor), Material Circulante (Paletes a Fornecedores) e vales VP2027 em aberto do app Recebimento de Paletes. Leitura única ao abrir ou tocar em Atualizar.
+    <b>Como o saldo é montado.</b> Mesma conta do Material Circulante: por fornecedor e modelo, ENTRADA menos SAÍDA. O nome do fornecedor é o do cadastro do app.
+    Ao tocar no fornecedor aparecem os vales que ainda têm saldo, com a data do lançamento mais antigo. Fornecedor com saída maior que entrada aparece nos alertas e não entra nos totais.
+    Leitura única ao abrir ou tocar em Atualizar.
   </div>
 </main>
 
 <script>
-// ═══ CONFIG DOS TRÊS PROJETOS (somente leitura) ═══
-const CFG_PALET={apiKey:"AIzaSyDGFj-G3kLZY50aiwB3eqBsfP2dLL9Lv-M",authDomain:"controle-de-paletes-bc9a9.firebaseapp.com",databaseURL:"https://controle-de-paletes-bc9a9-default-rtdb.firebaseio.com",projectId:"controle-de-paletes-bc9a9",appId:"1:470102079416:web:720f1ad8d8c6b89a15014d"};
-const CFG_CIRC={apiKey:"AIzaSyAxxEUiA8dSx-X0L_7MsEtXInnO1q1Jsws",authDomain:"controle-material-circulante.firebaseapp.com",databaseURL:"https://controle-material-circulante-default-rtdb.firebaseio.com",projectId:"controle-material-circulante",appId:"1:222824107055:web:c0fb5c76e59e8be0f94ada"};
-const CFG_VP={apiKey:"AIzaSyALpYKgyCbYATe_Nc-pZmNeBuyZcnid9CA",authDomain:"recebimentopalete.firebaseapp.com",databaseURL:"https://recebimentopalete-default-rtdb.firebaseio.com",projectId:"recebimentopalete",appId:"1:1006656539674:web:87970d09d4a1b43312d5a3"};
+const CFG={apiKey:"AIzaSyAxxEUiA8dSx-X0L_7MsEtXInnO1q1Jsws",authDomain:"controle-material-circulante.firebaseapp.com",databaseURL:"https://controle-material-circulante-default-rtdb.firebaseio.com",projectId:"controle-material-circulante",appId:"1:222824107055:web:c0fb5c76e59e8be0f94ada"};
 
 const MODS=['PBR','DESCARTAVEL','CHAPATEX'];
 const NOME={PBR:'PBR',DESCARTAVEL:'Descartável',CHAPATEX:'Chapatex'};
 const COR={PBR:'var(--pbr)',DESCARTAVEL:'var(--desc)',CHAPATEX:'var(--chap)'};
-const ITEM_CIRC={'PALETE PBR':'PBR','PALETE DESCARTÁVEL':'DESCARTAVEL','PALETE DESCARTAVEL':'DESCARTAVEL','CHAPATEX':'CHAPATEX'};
-const FONTE={A:'PaletCD',C:'Mat. Circulante',B:'Receb. Paletes'};
+const ITEM={'PALETE PBR':'PBR','PALETE DESCARTÁVEL':'DESCARTAVEL','PALETE DESCARTAVEL':'DESCARTAVEL','CHAPATEX':'CHAPATEX'};
 
 const fmt=n=>Number(n||0).toLocaleString('pt-BR');
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $=id=>document.getElementById(id);
-
-function app(nome,cfg){return firebase.apps.find(a=>a.name===nome)||firebase.initializeApp(cfg,nome);}
-async function ler(nome,cfg,caminho){
-  const a=app(nome,cfg);
-  try{if(!a.auth().currentUser)await a.auth().signInAnonymously();}catch(e){/* segue sem auth, igual ao PaletCD */}
-  const s=await a.database().ref(caminho).once('value');
-  return s.val()||{};
-}
-
-// ═══ NORMALIZAÇÃO ═══
-function normVale(v){
-  v=String(v||'').toUpperCase().replace(/\s+/g,'');
-  const m=v.match(/^VP2027-?(\d+)$/);
-  return m?'VP2027-'+m[1].padStart(6,'0'):v;
-}
-function chaveForn(n){
-  return String(n||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase()
-    .replace(/[^A-Z0-9 ]/g,' ').replace(/\b(LTDA|ME|EPP|EIRELI|S ?A|SA)\b/g,' ').replace(/\s+/g,' ').trim();
-}
-function ctrlMov(m){
-  const d=m.controle||m.nControle||m.valePalete||m.nf;
-  if(d)return String(d).trim();
-  const r=String(m.obs||'').match(/controle\s*:\s*([^|]+)/i);
-  return r?r[1].trim():'';
-}
-// "dd/mm/aaaa, hh:mm" | "dd/mm/aaaa" | "aaaa-mm-dd" -> Date
+const sem=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
 function pData(s){
   s=String(s||'');
   let m=s.match(/(\d{2})\/(\d{2})\/(\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);
@@ -153,153 +126,74 @@ function pData(s){
   return null;
 }
 const dBR=d=>d?d.toLocaleDateString('pt-BR'):'—';
+const zero=()=>({PBR:0,DESCARTAVEL:0,CHAPATEX:0});
 
-// ═══ ESTADO ═══
-let VALES={}, FORN=[], ALERTAS=[], STATUS={A:'…',C:'…',B:'…'};
-
-function vale(k){
-  if(!VALES[k])VALES[k]={vale:k,forns:{},data:null,src:{}};
-  return VALES[k];
-}
-function soma(v,fonte,tipo,mod,q){
-  if(!MODS.includes(mod)||!(q>0))return;
-  const s=v.src[fonte]||(v.src[fonte]={dev:{},pag:{}});
-  s[tipo][mod]=(s[tipo][mod]||0)+q;
-}
-function marca(v,fonte,forn,data){
-  if(forn)v.forns[fonte]=String(forn).trim();
-  const d=pData(data);if(d&&(!v.data||d<v.data))v.data=d;
-}
+let FORN=[],ALERTAS=[],db=null;
 
 async function carregar(){
   $('btnAt').disabled=true;
-  $('lista').innerHTML='<div class="carregando"><div class="spin"></div>Lendo os três controles…</div>';
-  VALES={};ALERTAS=[];STATUS={A:'…',C:'…',B:'…'};desenhaFontes();
-  let semCtrlPag=0,semCtrlDev=0,semValeC=0;
-
-  const [rA,rC,rB]=await Promise.allSettled([
-    ler('palet',CFG_PALET,'palet_app/v2/movs'),
-    ler('circ',CFG_CIRC,'vales_forn/lancamentos'),
-    ler('vp',CFG_VP,'abertos')
-  ]);
-
-  // A) PaletCD
-  if(rA.status==='fulfilled'){
-    STATUS.A='ok';
-    Object.values(rA.value).forEach(m=>{
-      if(!m||typeof m!=='object')return;
-      const deb=m.tipo==='Recebimento Fornecedor';
-      const pag=m.tipo==='Pagamento Fornecedor'||m.tipo==='Saida para Fornecedor';
-      if(!deb&&!pag)return;
-      const tot=MODS.reduce((s,k)=>s+(+(m.modelos||{})[k]||0),0);
-      const c=normVale(ctrlMov(m));
-      if(!c){if(pag)semCtrlPag+=tot;else semCtrlDev+=tot;return;}
-      const v=vale(c);marca(v,'A',m.forn,m.ts);
-      MODS.forEach(k=>soma(v,'A',deb?'dev':'pag',k,+(m.modelos||{})[k]||0));
-    });
-  }else STATUS.A='erro';
-
-  // C) Material Circulante
-  if(rC.status==='fulfilled'){
-    STATUS.C='ok';
-    Object.values(rC.value).forEach(r=>{
-      if(!r||typeof r!=='object')return;
-      const mod=ITEM_CIRC[String(r.item||'').toUpperCase()];
-      if(!mod)return;
-      const c=normVale(r.vale);
-      if(!c){semValeC+=+r.qtde||0;return;}
-      const v=vale(c);marca(v,'C',r.forn,r.data);
-      soma(v,'C',r.tipo==='ENTRADA'?'dev':'pag',mod,+r.qtde||0);
-    });
-  }else STATUS.C='erro';
-
-  // B) VP2027 em aberto (Recebimento de Paletes)
-  if(rB.status==='fulfilled'){
-    STATUS.B='ok';
-    Object.values(rB.value).forEach(r=>{
-      if(!r||typeof r!=='object')return;
-      const v=vale(normVale(r.id));marca(v,'B',r.empresa,r.data);
-      MODS.forEach(k=>soma(v,'B','dev',k,+(r.itens||{})[k]||0));
-      v.abertoVP=true;
-    });
-  }else STATUS.B='erro';
-
-  consolidar(semCtrlPag,semCtrlDev,semValeC);
-  $('hora').textContent='Atualizado '+new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+  $('lista').innerHTML='<div class="carregando"><div class="spin"></div>Lendo os vales dos fornecedores…</div>';
+  try{
+    if(!db){const a=firebase.initializeApp(CFG);try{await a.auth().signInAnonymously();}catch(e){}db=a.database();}
+    const snap=await db.ref('vales_forn/lancamentos').once('value');
+    montar(snap.val()||{});
+    $('hora').textContent='Atualizado '+new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+  }catch(e){
+    console.error(e);
+    $('titulo').textContent='Não deu para ler o Material Circulante';
+    $('cards').innerHTML='';$('secAlertas').innerHTML='';
+    $('lista').innerHTML='<div class="erro">Sem conexão com o Material Circulante ('+esc(e.message)+').<br><br><button class="btn" onclick="carregar()">Tentar de novo</button></div>';
+    $('hora').textContent='falhou';
+  }
   $('btnAt').disabled=false;
 }
 
-function consolidar(semCtrlPag,semCtrlDev,semValeC){
-  const mapa={};
-  const pagoAMais=[],nomeDiverge=[],qtdDiverge=[];
-
-  Object.values(VALES).forEach(v=>{
-    const fontes=Object.keys(v.src);
-    const saldo={};let neg=false,positivo=0;
-    MODS.forEach(k=>{
-      const dev=Math.max(0,...fontes.map(f=>v.src[f].dev[k]||0));
-      const pag=Math.max(0,...fontes.map(f=>v.src[f].pag[k]||0));
-      const s=dev-pag;
-      if(s<0)neg=true;
-      saldo[k]=Math.max(0,s);positivo+=saldo[k];
-      const devs=fontes.map(f=>v.src[f].dev[k]||0).filter(x=>x>0);
-      if(devs.length>1&&Math.max(...devs)!==Math.min(...devs))qtdDiverge.push({v,k,devs:fontes.map(f=>FONTE[f]+' '+fmt(v.src[f].dev[k]||0)).join(' × ')});
-    });
-    v.saldo=saldo;v.total=positivo;v.fontes=fontes;
-
-    // VP2027 pago e já fora da lista de abertos: quitado, sem alerta
-    const quitadoVP=v.vale.startsWith('VP2027-')&&!v.abertoVP;
-    if(neg&&!quitadoVP){
-      const pg=MODS.map(k=>{const d=Math.max(0,...fontes.map(f=>v.src[f].dev[k]||0)),p=Math.max(0,...fontes.map(f=>v.src[f].pag[k]||0));return p>d?NOME[k]+' '+fmt(p-d):''}).filter(Boolean).join(', ');
-      pagoAMais.push({v,pg});
-    }
-    if(quitadoVP&&!fontes.includes('C'))return;
-
-    // fornecedor: Material Circulante (cadastrado) > PaletCD > Recebimento
-    const nome=v.forns.C||v.forns.A||v.forns.B||'';
-    const chaves=[...new Set(Object.values(v.forns).map(chaveForn).filter(Boolean))];
-    if(chaves.length>1)nomeDiverge.push({v,nomes:Object.entries(v.forns).map(([f,n])=>FONTE[f]+': '+n).join(' | ')});
-    v.nome=nome||'SEM FORNECEDOR';
-
-    if(positivo<=0)return;
-    const ck=chaveForn(v.nome)||'SEM FORNECEDOR';
-    const g=mapa[ck]||(mapa[ck]={nome:v.nome,tot:{PBR:0,DESCARTAVEL:0,CHAPATEX:0},total:0,vales:[]});
-    MODS.forEach(k=>g.tot[k]+=saldo[k]);g.total+=positivo;g.vales.push(v);
+function montar(raw){
+  const F={};let semVale=0;
+  Object.values(raw).forEach(r=>{
+    if(!r||typeof r!=='object')return;
+    const mod=ITEM[sem(r.item)];if(!mod)return;
+    const q=+r.qtde||0;if(!q)return;
+    const sinal=r.tipo==='ENTRADA'?1:-1;
+    const nome=String(r.forn||'').trim()||'SEM FORNECEDOR';
+    const f=F[nome]||(F[nome]={nome,saldo:zero(),vales:{},ult:null});
+    f.saldo[mod]+=sinal*q;
+    const d=pData(r.data);if(d&&(!f.ult||d>f.ult))f.ult=d;
+    const nv=String(r.vale||'').trim().toUpperCase();
+    if(!nv){semVale+=q;return;}
+    const v=f.vales[nv]||(f.vales[nv]={vale:nv,saldo:zero(),data:null});
+    v.saldo[mod]+=sinal*q;
+    if(r.tipo==='ENTRADA'&&d&&(!v.data||d<v.data))v.data=d;
   });
 
-  FORN=Object.values(mapa).sort((a,b)=>b.total-a.total);
-  FORN.forEach(g=>g.vales.sort((a,b)=>(a.data||0)-(b.data||0)));
-
-  if(semCtrlPag>0)ALERTAS.push({e:1,t:fmt(semCtrlPag)+' paletes pagos no PaletCD sem nº do vale',s:'Saídas manuais sem controle não abatem de nenhum fornecedor. O saldo real pode ser menor do que o mostrado.'});
-  if(semCtrlDev>0)ALERTAS.push({e:0,t:fmt(semCtrlDev)+' paletes recebidos no PaletCD sem nº do vale',s:'Não entram no saldo porque não dá para cruzar.'});
-  if(semValeC>0)ALERTAS.push({e:0,t:fmt(semValeC)+' paletes no Material Circulante sem nº do vale',s:'Não entram no saldo porque não dá para cruzar.'});
-  pagoAMais.forEach(x=>ALERTAS.push({e:1,t:'Vale '+x.v.vale+' pago a mais: '+x.pg,s:(x.v.forns.C||x.v.forns.A||x.v.forns.B||'sem fornecedor')+' · fontes: '+x.v.fontes.map(f=>FONTE[f]).join(', ')+'. Ficou zerado no painel.'}));
-  nomeDiverge.forEach(x=>ALERTAS.push({e:0,t:'Vale '+x.v.vale+' com fornecedor diferente entre os apps',s:x.nomes+'. Contou no nome do Material Circulante.'}));
-  qtdDiverge.forEach(x=>ALERTAS.push({e:0,t:'Vale '+x.v.vale+': '+NOME[x.k]+' com quantidade diferente',s:x.devs+'. Contou a maior.'}));
-
+  ALERTAS=[];FORN=[];
+  Object.values(F).forEach(f=>{
+    const neg=MODS.filter(k=>f.saldo[k]<0);
+    neg.forEach(k=>ALERTAS.push({e:1,t:f.nome+': '+NOME[k]+' com saída maior que entrada ('+fmt(f.saldo[k])+')',s:'Pagamento lançado a mais ou entrada que faltou lançar. Ficou fora dos totais.'}));
+    const tot={};MODS.forEach(k=>tot[k]=Math.max(0,f.saldo[k]));
+    const total=MODS.reduce((s,k)=>s+tot[k],0);
+    if(total<=0)return;
+    const vales=Object.values(f.vales).filter(v=>MODS.some(k=>v.saldo[k]>0)).sort((a,b)=>(a.data||0)-(b.data||0));
+    FORN.push({nome:f.nome,tot,total,vales,ult:f.ult});
+  });
+  FORN.sort((a,b)=>b.total-a.total);
+  if(semVale>0)ALERTAS.push({e:0,t:fmt(semVale)+' paletes lançados sem nº do vale',s:'Entram no saldo do fornecedor, mas não aparecem no detalhe por vale.'});
   desenhar();
 }
 
-// ═══ TELA ═══
-function desenhaFontes(){
-  $('fontes').innerHTML=['A','C','B'].map(f=>`<span class="fonte"><span class="dot ${STATUS[f]==='ok'?'ok':STATUS[f]==='erro'?'erro':''}"></span>${FONTE[f]}${STATUS[f]==='erro'?' · falhou':''}</span>`).join('');
-}
 let tDeb;function deb(){clearTimeout(tDeb);tDeb=setTimeout(desenharLista,250);}
 
 function desenhar(){
-  desenhaFontes();
-  const T={PBR:0,DESCARTAVEL:0,CHAPATEX:0};let tot=0,nv=0;
-  FORN.forEach(g=>{MODS.forEach(k=>T[k]+=g.tot[k]);tot+=g.total;nv+=g.vales.length;});
-  const falhou=['A','C','B'].filter(f=>STATUS[f]==='erro').map(f=>FONTE[f]);
-  if(!FORN.length){
-    $('titulo').textContent=falhou.length?'Não deu para ler: '+falhou.join(', '):'CD não deve nenhum palete a fornecedor';
-  }else{
+  const T=zero();let tot=0;
+  FORN.forEach(g=>{MODS.forEach(k=>T[k]+=g.tot[k]);tot+=g.total;});
+  if(!FORN.length){$('titulo').textContent='CD não deve nenhum palete a fornecedor';}
+  else{
     const p=FORN[0];
-    $('titulo').textContent='CD deve '+fmt(tot)+' paletes a '+fmt(FORN.length)+' fornecedores; '+p.nome+' concentra '+fmt(p.total)+' ('+Math.round(p.total/tot*100)+'%)'+(falhou.length?' · sem '+falhou.join(', '):'');
+    $('titulo').textContent='CD deve '+fmt(tot)+' paletes a '+fmt(FORN.length)+(FORN.length===1?' fornecedor; ':' fornecedores; ')+p.nome+' concentra '+fmt(p.total)+' ('+Math.round(p.total/tot*100)+'%)';
   }
   $('cards').innerHTML=
     MODS.map(k=>`<div class="kpi ${k==='PBR'?'pbr':k==='DESCARTAVEL'?'desc':'chap'}"><div class="l">${NOME[k]}</div><div class="v">${fmt(T[k])}</div><div class="s">a devolver</div></div>`).join('')+
-    `<div class="kpi"><div class="l">Vales em aberto</div><div class="v">${fmt(nv)}</div><div class="s">${fmt(FORN.length)} fornecedores</div></div>`;
+    `<div class="kpi"><div class="l">Total</div><div class="v">${fmt(tot)}</div><div class="s">${fmt(FORN.length)} fornecedores</div></div>`;
   desenharLista();
   $('secAlertas').innerHTML=ALERTAS.length
     ?`<h2>Pontos para conferir (${fmt(ALERTAS.length)})</h2>`+ALERTAS.map(a=>`<div class="alerta ${a.e?'e':''}">${esc(a.t)}<small>${esc(a.s)}</small></div>`).join('')
@@ -307,30 +201,31 @@ function desenhar(){
 }
 
 function desenharLista(){
-  const q=chaveForn($('busca').value);const qv=normVale($('busca').value);
-  const lista=FORN.filter(g=>!q||chaveForn(g.nome).includes(q)||g.vales.some(v=>v.vale.includes(qv)));
+  const q=sem($('busca').value).trim();
+  const lista=FORN.filter(g=>!q||sem(g.nome).includes(q)||g.vales.some(v=>sem(v.vale).includes(q)));
   if(!lista.length){$('lista').innerHTML=`<div class="vazio">${FORN.length?'Nada encontrado para essa busca.':'Nenhum saldo devedor.'}</div>`;return;}
-  $('lista').innerHTML=lista.map((g,i)=>`
+  $('lista').innerHTML=lista.map(g=>`
     <div class="forn" onclick="this.classList.toggle('aberto')">
       <div class="top"><span class="nome">${esc(g.nome)}</span><span class="tot">${fmt(g.total)}</span></div>
-      <div class="meta">${fmt(g.vales.length)} vale(s) em aberto · mais antigo ${dBR(g.vales[0].data)}</div>
+      <div class="meta">${fmt(g.vales.length)} vale(s) com saldo · último lançamento ${dBR(g.ult)}</div>
       ${MODS.map(k=>`<div class="linha"><span><span class="sq" style="background:${COR[k]}"></span>${NOME[k]}</span><span>${fmt(g.tot[k])}</span></div>`).join('')}
-      <div class="det">${g.vales.map(v=>`
-        <div class="vale"><div><b>${esc(v.vale)}</b>${v.fontes.map(f=>`<span class="tag ${v.fontes.length>1?'':'l'}">${FONTE[f]}</span>`).join('')}<br><span style="color:var(--texto-2)">${dBR(v.data)}</span></div>
-        <div style="text-align:right">${MODS.filter(k=>v.saldo[k]>0).map(k=>NOME[k]+' <b>'+fmt(v.saldo[k])+'</b>').join('<br>')}</div></div>`).join('')}
+      <div class="det">${g.vales.length?g.vales.map(v=>`
+        <div class="vale"><div><b>${esc(v.vale)}</b><br><span style="color:var(--texto-2)">${dBR(v.data)}</span></div>
+        <div style="text-align:right">${MODS.filter(k=>v.saldo[k]>0).map(k=>NOME[k]+' <b>'+fmt(v.saldo[k])+'</b>').join('<br>')}</div></div>`).join('')
+        :'<div style="font-size:13px;color:var(--texto-2)">Pagamentos lançados com nº de vale diferente da entrada. O saldo do fornecedor vale, o detalhe por vale não fecha.</div>'}
       </div>
     </div>`).join('');
 }
 
 function exportar(){
   if(!FORN.length)return;
-  const L=['Fornecedor;PBR;Descartavel;Chapatex;Total;Vales em aberto'];
-  FORN.forEach(g=>L.push([g.nome,g.tot.PBR,g.tot.DESCARTAVEL,g.tot.CHAPATEX,g.total,g.vales.length].join(';')));
-  L.push('');L.push('Vale;Fornecedor;Data;PBR;Descartavel;Chapatex;Fontes');
-  FORN.forEach(g=>g.vales.forEach(v=>L.push([v.vale,g.nome,dBR(v.data),v.saldo.PBR,v.saldo.DESCARTAVEL,v.saldo.CHAPATEX,v.fontes.map(f=>FONTE[f]).join(' + ')].join(';'))));
+  const L=['Fornecedor;PBR;Descartavel;Chapatex;Total'];
+  FORN.forEach(g=>L.push([g.nome,g.tot.PBR,g.tot.DESCARTAVEL,g.tot.CHAPATEX,g.total].join(';')));
+  L.push('');L.push('Vale;Fornecedor;Data;PBR;Descartavel;Chapatex');
+  FORN.forEach(g=>g.vales.forEach(v=>L.push([v.vale,g.nome,dBR(v.data),Math.max(0,v.saldo.PBR),Math.max(0,v.saldo.DESCARTAVEL),Math.max(0,v.saldo.CHAPATEX)].join(';'))));
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob(['\ufeff'+L.join('\r\n')],{type:'text/csv;charset=utf-8'}));
-  a.download='saldo_devedor_fornecedores_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.href=URL.createObjectURL(new Blob(['﻿'+L.join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  a.download='saldo_circulante_'+new Date().toISOString().slice(0,10)+'.csv';
   a.click();
 }
 
